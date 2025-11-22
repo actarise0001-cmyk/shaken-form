@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>上田車検センター ご予約フォーム</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
+  <style>
+    :root { --brand: #1D5C97; }
+    body {
+      font-family: "Noto Sans JP", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      margin: 0; background: #f6f8fb; color: #111;
+    }
+    header { text-align: center; margin: 60px 0 30px; }
+    header h1 { margin: 0; color: var(--brand); font-size: 1.7em; font-weight: 700; }
+    .card {
+      background: #fff; border-radius: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      max-width: 420px; margin: 0 auto 60px; padding: 28px 30px; text-align: center;
+    }
+    h3 { font-size: 1.05em; margin-bottom: 26px; color: #222; }
+    input, select {
+      display: block; width: 100%; box-sizing: border-box;
+      padding: 10px 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    button {
+      display: block; width: 100%; background: var(--brand); color: #fff;
+      font-size: 16px; font-weight: 600; padding: 10px 16px;
+      border: none; border-radius: 8px; cursor: pointer; transition: background 0.2s;
+    }
+    button:hover { background: #174d81; }
+    button:disabled { background: #999; cursor: not-allowed; }
+    .muted { color: #888; font-size: 0.85em; margin-top: 6px; }
+    .modal {
+      position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.45); z-index: 999;
+    }
+    .modal.show { display: flex; }
+    .modal .panel {
+      background: #fff; border-radius: 16px; box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+      animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    .modal .panel.calendar-panel { width: min(95vw, 860px); padding: 16px 20px 20px; }
+    .calendar-container {
+      position: relative;
+      min-height: 500px;
+    }
+    #calendar-loader {
+      position: absolute; inset: 0; background: rgba(255,255,255,0.85);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1em; color: #555; z-index: 10;
+    }
+    .fc-theme-standard .fc-scrollgrid { border: none !important; }
+    .fc-day-disabled { background-color: #f5f5f5 !important; color: #aaa; pointer-events: none; }
+    .fc-day-sun { color: #d9534f !important; }
+    .fc-day-sun .fc-daygrid-day-number { font-weight: 600; }
+
+    .fc .remain-badge {
+      font-size: 11px; padding: 3px 7px; border-radius: 999px; font-weight: 500;
+      position: absolute; right: 4px; bottom: 4px;
+      text-align: center; line-height: 1.2;
+    }
+    .fc .remain-0 { background: #fde8e8; color: #c0392b; }
+    .fc .remain-gt0 { background: #e9f7ef; color: #0a5f2e; }
+
+    .modal .panel.alert-panel { max-width: 380px; text-align: center; padding: 30px; }
+    .modal #alertMsg { margin: 0 0 24px; font-size: 16px; line-height: 1.6; }
+    .modal .ok-btn { width: 120px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <header><h1>上田車検センター<br>ご予約フォーム</h1></header>
+
+  <!-- ログイン画面 -->
+  <section class="card" id="gate">
+    <h3>ログインパスワードを入力</h3>
+    <input id="pw" type="password" placeholder="パスワードを入力" />
+    <button id="pwBtn">送信</button>
+    <div class="muted" id="pwMsg"></div>
+  </section>
+
+  <!-- メインフォーム -->
+  <section class="card" id="main" style="display:none;">
+    <h3>ご予約内容の入力</h3>
+    <select id="carType">
+      <option value="">車両区分を選択</option>
+      <option value="普通車">普通車</option>
+      <option value="大型車">大型車</option>
+    </select>
+    <input id="date" type="text" placeholder="予約希望日（クリックして選択）" readonly />
+    <input id="bizNo" type="text" placeholder="事業者番号" />
+    <input id="carModel" type="text" placeholder="車種" />
+    <input id="name" type="text" placeholder="お名前" />
+    <button id="submitBtn">送信</button>
+    <div class="muted" id="msg"></div>
+  </section>
+
+  <!-- 完了画面 -->
+  <section class="card" id="thanks" style="display:none;">
+    <h3>予約を受け付けました</h3>
+    <button id="backBtn">予約TOPへ戻る</button>
+  </section>
+
+  <div class="modal" id="pickerModal">
+    <div class="panel calendar-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <strong style="font-size:1.1em;">予約日を選択</strong>
+        <button id="closePicker" style="width:auto;padding:6px 12px;font-size:14px;">閉じる</button>
+      </div>
+      <div class="calendar-container">
+        <div id="calendar"></div>
+        <div id="calendar-loader" style="display: none;">カレンダーを読み込んでいます...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="alertModal">
+    <div class="panel alert-panel">
+      <p id="alertMsg"></p>
+      <button id="alertOkBtn" class="ok-btn">OK</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <script>
+    const $ = q => document.querySelector(q);
+    const todayIso = () =>
+      new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }))
+        .toISOString()
+        .slice(0, 10);
+
+    const alertModal = $('#alertModal');
+    function showAlert(msg) {
+      $('#alertMsg').textContent = msg;
+      alertModal.classList.add('show');
+    }
+    $('#alertOkBtn').addEventListener('click', () => alertModal.classList.remove('show'));
+    alertModal.addEventListener('click', (e) => {
+      if (e.target === alertModal) alertModal.classList.remove('show');
+    });
+
+    $('#pwBtn').addEventListener('click', () => {
+      $('#pwBtn').disabled = true;
+      google.script.run
+        .withSuccessHandler(res => {
+          $('#pwBtn').disabled = false;
+          if (res.ok) {
+            $('#gate').style.display = 'none';
+            $('#main').style.display = 'block';
+          } else {
+            $('#pwMsg').textContent = 'パスワードが違います';
+          }
+        })
+        .withFailureHandler(() => {
+          $('#pwBtn').disabled = false;
+          showAlert('認証エラーが発生しました');
+        })
+        .api_checkPassword($('#pw').value.trim());
+    });
+    $('#pw').addEventListener('keypress', e => {
+      if (e.key === 'Enter') $('#pwBtn').click();
+    });
+
+    $('#carType').addEventListener('change', () => {
+      $('#date').value = '';
+      if (fc) fc.render();
+    });
+
+    let fc, calendarData = {};
+    let initialDataLoaded = false;
+    const calendarEl = $('#calendar');
+    const loaderEl = $('#calendar-loader');
+
+    function loadInitialData() {
+      if (initialDataLoaded) return;
+
+      loaderEl.style.display = 'flex';
+      google.script.run
+        .withSuccessHandler(res => {
+          calendarData = res.days.reduce((a, d) => { a[d.date] = d; return a; }, {});
+          initialDataLoaded = true;
+          if (fc) fc.render();
+          loaderEl.style.display = 'none';
+        })
+        .withFailureHandler(err => {
+          showAlert('カレンダーの読み込みに失敗しました。');
+          loaderEl.style.display = 'none';
+        })
+        .api_getInitialCalendarData();
+    }
+
+    function openPicker() {
+      const carType = $('#carType').value;
+      if (!carType) {
+        showAlert('車両区分を選択してください');
+        return;
+      }
+      $('#pickerModal').classList.add('show');
+
+      if (fc) fc.destroy();
+
+      fc = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'ja',
+        firstDay: 1,
+        fixedWeekCount: false,
+        height: 'auto',
+        headerToolbar: { left: 'prev,next', center: 'title', right: '' },
+
+        dayCellClassNames: (arg) => {
+          const iso =
+            arg.date.getFullYear() +
+            '-' +
+            ('0' + (arg.date.getMonth() + 1)).slice(-2) +
+            '-' +
+            ('0' + arg.date.getDate()).slice(-2);
+          const d = calendarData[iso];
+          if (iso < todayIso() || !d || d.isSunday) return ['fc-day-disabled'];
+
+          const rem = carType === '普通車' ? d.remainingNormal : d.remainingLarge;
+          if (rem === 0) return ['fc-day-disabled'];
+          return [];
+        },
+
+        dayCellDidMount: (arg) => {
+          arg.el.style.position = 'relative';
+          const year = arg.date.getFullYear();
+          const month = ('0' + (arg.date.getMonth() + 1)).slice(-2);
+          const day = ('0' + arg.date.getDate()).slice(-2);
+          const iso = `${year}-${month}-${day}`;
+          const d = calendarData[iso];
+
+          if (!d || d.isSunday || iso < todayIso()) return;
+
+          const carTypeNow = $('#carType').value;
+          const rem = carTypeNow === '普通車' ? d.remainingNormal : d.remainingLarge;
+
+          // 「残り」「◯件」を2行表示するバッジ
+          const b = document.createElement('div');
+          b.className = 'remain-badge ' + (rem > 0 ? 'remain-gt0' : 'remain-0');
+
+          const line1 = document.createElement('div');
+          line1.textContent = '残り';
+
+          const line2 = document.createElement('div');
+          line2.textContent = `${rem}件`;
+
+          b.appendChild(line1);
+          b.appendChild(line2);
+
+          arg.el.appendChild(b);
+        },
+
+        dateClick: (info) => {
+          if (info.dayEl.classList.contains('fc-day-disabled')) return;
+          $('#date').value = info.dateStr;
+          $('#pickerModal').classList.remove('show');
+        }
+      });
+
+      if (initialDataLoaded) {
+        fc.render();
+      } else {
+        loadInitialData();
+      }
+    }
+
+    $('#date').addEventListener('click', openPicker);
+    $('#closePicker').addEventListener('click', () => $('#pickerModal').classList.remove('show'));
+
+    $('#submitBtn').addEventListener('click', () => {
+      const p = {
+        date: $('#date').value,
+        carType: $('#carType').value,
+        bizNo: $('#bizNo').value,
+        carModel: $('#carModel').value,
+        name: $('#name').value
+      };
+      if (!p.carType || !p.date || !p.bizNo || !p.carModel || !p.name) {
+        showAlert('すべての項目を入力してください');
+        return;
+      }
+      $('#submitBtn').disabled = true;
+      $('#msg').textContent = '送信中...';
+
+      google.script.run
+        .withSuccessHandler(res => {
+          $('#submitBtn').disabled = false;
+          $('#msg').textContent = '';
+          if (res.ok) {
+            $('#main').style.display = 'none';
+            $('#thanks').style.display = 'block';
+            initialDataLoaded = false;
+            calendarData = {};
+          } else {
+            showAlert('予約に失敗しました。時間をおいて再試行してください。');
+          }
+        })
+        .withFailureHandler(err => {
+          $('#submitBtn').disabled = false;
+          $('#msg').textContent = '';
+          showAlert(err.message || 'サーバーエラーが発生しました。');
+        })
+        .api_submitReservation(p);
+    });
+
+    $('#backBtn').addEventListener('click', () => {
+      $('#thanks').style.display = 'none';
+      $('#main').style.display = 'block';
+      ['date', 'bizNo', 'carModel', 'name', 'carType'].forEach(id => {
+        $('#' + id).value = '';
+      });
+    });
+  </script>
+</body>
+</html>
